@@ -3,6 +3,8 @@
 #include "key.h"
 #include "Encoder.h"
 #include "jy61p.h"
+#include "Control.h"
+#include "PID.h"
 
 //菜单状态结构体
 typedef enum 
@@ -13,6 +15,8 @@ typedef enum
     MENU_SHOW_ENCODER, //显示编码器状态
     MENU_SHOW_GYRO,    //显示陀螺仪状态
     MENU_SHOW_VIEW,    //显示视图状态
+    MENU_PID_TUNE,   //PID调参状态
+    MENU_SET_SPEED, //设置速度
 } MenuState;
 
 
@@ -20,6 +24,10 @@ typedef enum
 static uint8_t Menu_resquest = 1;// 菜单请求标志
 static MenuState current_state = MENU_STATE_MAIN; // 当前菜单状态
 static uint8_t Selected_index = 0; // 当前选中菜单项索引
+
+static uint8_t tune_motor_select = 0; // 0: 电机1, 1: 电机2
+static uint8_t tune_param_select = 0; // 0: Kp, 1: Ki, 2: Kd
+static const float tune_step[] = {10.0f, 0.1f, 10.0f}; // Kp, Ki, Kd 调整步长 
 
 //静态菜单显示
 static void display_menu(void) 
@@ -44,136 +52,222 @@ static void display_menu(void)
         OLED_ShowString(10, 48, (uint8_t *)"Show view", 16, 1);
         OLED_ShowString(0, 16+Selected_index*16, (uint8_t *)">", 16, 1);
         break;
+    case MENU_PARAM_SET:
+        OLED_ShowString(0, 0, (uint8_t *)"---Param Set---", 16, 1);
+        OLED_ShowString(10, 16, (uint8_t *)"Motor 1 PID", 16, 1);
+        OLED_ShowString(10, 32, (uint8_t *)"Motor 2 PID", 16, 1);
+        OLED_ShowString(10, 48, (uint8_t *)"Set Speed", 16, 1);
+        OLED_ShowString(0, 16 + Selected_index * 16, (uint8_t *)">", 16, 1);
     case MENU_SHOW_GYRO:
         OLED_ShowString(0, 0, (uint8_t *)"---Show Gyro---", 16, 1);
+        break;
+    case MENU_PID_TUNE:
+        {
+            char title[20];
+            snprintf(title, sizeof(title), "---Tune Motor%d---", tune_motor_select + 1);
+            OLED_ShowString(0, 0, (uint8_t *)title, 16, 1);
+            OLED_ShowString(0, 16 + tune_param_select * 16, (uint8_t *)">", 16, 1);
+        }
+        break;
+    case MENU_SET_SPEED: 
+        OLED_ShowString(0, 0, (uint8_t *)"---Set Speed---", 16, 1);
+        OLED_ShowString(0, 48, (uint8_t *)"K1+ K2- K4<Back", 16, 1); 
         break;
     }
     
 }
 
-static void Key_input(void) 
+static void Key_input(void)
 {
-    for(int i=0;i<KEY_Number;i++)
+    // 遍历所有按键
+    for (int i = 0; i < KEY_Number; i++)
     {
-        if(key[i].Short_Flag)
+        int key_id = i;
+        // 检查是否有短按标志
+        if (key[i].Short_Flag)
         {
-            key[i].Short_Flag=0;
-            int key_id=i;
+            key[i].Short_Flag = 0; // 清除标志
 
+            // 根据当前的菜单状态执行不同的操作
             switch (current_state)
             {
-                case MENU_STATE_MAIN:
-                case MENU_DATA_VIEW:
-                case MENU_PARAM_SET:
-                    Menu_resquest = 1; // 请求菜单更新
-                    if(current_state == MENU_STATE_MAIN)
+            case MENU_STATE_MAIN:
+                Menu_resquest = 1; // 请求菜单刷新
+                const int main_max_index = 2;
+                if (key_id == 0) // KEY1: 上
+                {
+                    Selected_index = (Selected_index > 0) ? Selected_index - 1 : main_max_index;
+                }
+                else if (key_id == 1) // KEY2: 下
+                {
+                    Selected_index = (Selected_index < main_max_index) ? Selected_index + 1 : 0;
+                }
+                else if (key_id == 2) // KEY3: 确认
+                {
+                    switch (Selected_index)
                     {
-                        const int max_index = 2; // 主菜单最大索引
-                        if(key_id == 0)//KEY1
-                        {
-                            if(Selected_index>0)
-                            {
-                                Selected_index--; // 向下移动
-                            }
-                            else
-                            {
-                                Selected_index = max_index; // 回到最后一个选项
-                            }
-                        } 
-                        else if(key_id == 1)//KEY2
-                        {
-                            if(Selected_index < max_index)
-                            {
-                                Selected_index++; // 向上移动
-                            }
-                            else
-                            {
-                                Selected_index = 0; // 回到第一个选项
-                            }
-                        } 
-                        else if(key_id == 2)//KEY3
-                        {
-                            switch (Selected_index)
-                            {
-                                case 0: // Start
-                                    current_state = MENU_STATE_MAIN; // 返回主菜单
-                                    break;
-                                case 1: // Data View
-                                    current_state = MENU_DATA_VIEW; // 进入数据查看状态
-                                    Selected_index = 0; 
-                                    break;
-                                case 2: // Param Set
-                                    current_state = MENU_PARAM_SET; // 进入参数设置状态
-                                    Selected_index = 0;
-                                    break;
-                            }
-                        }
+                    case 0: // Start
+                        
+                        break;
+                    case 1: // Data View
+                        current_state = MENU_DATA_VIEW; // 进入数据查看
+                        Selected_index = 0;
+                        break;
+                    case 2: // Param Set
+                        current_state = MENU_PARAM_SET; // 进入参数设置
+                        Selected_index = 0;
+                        break;
                     }
-                    else if(current_state == MENU_DATA_VIEW)
-                    {
-                        const int max_index = 2; // 数据查看最大索引
-                        if(key_id == 0)//KEY1
-                        {
-                            if(Selected_index>0)
-                            {
-                                Selected_index--; // 向下移动
-                            }
-                            else
-                            {
-                                Selected_index = max_index; // 回到最后一个选项
-                            }
-                        }
-                        else if(key_id == 1)//KEY2
-                        {
-                            if(Selected_index < max_index)
-                            {
-                                Selected_index++; // 向上移动
-                            }
-                            else
-                            {
-                                Selected_index = 0; // 回到第一个选项
-                            }
-                        }
-                        else if(key_id == 2)//KEY3
-                        {
-                            switch (Selected_index)
-                            {
-                                case 0: // Show Encoder
-                                    current_state = MENU_SHOW_ENCODER; // 进入显示编码器状态
-                                    break;
-                                case 1: // Show Gyro
-                                    current_state = MENU_SHOW_GYRO; // 进入显示陀螺仪状态
-                                    break;
-                                case 2: // Show view
-                                    break;
-                            }
-                        }
-                        else if (key_id == 3)//KEY4
-                        {
-                            current_state = MENU_STATE_MAIN; // 返回主菜单
-                        }                      
-                    }     
+                }
                 break;
-                case MENU_SHOW_ENCODER:
-                    if(key_id == 0)//KEY1
+
+            case MENU_DATA_VIEW:
+                Menu_resquest = 1;
+                const int data_view_max_index = 2;
+                if (key_id == 0) // KEY1: 上
+                {
+                    Selected_index = (Selected_index > 0) ? Selected_index - 1 : data_view_max_index;
+                }
+                else if (key_id == 1) // KEY2: 下
+                {
+                    Selected_index = (Selected_index < data_view_max_index) ? Selected_index + 1 : 0;
+                }
+                else if (key_id == 2) // KEY3: 确认
+                {
+                    switch (Selected_index)
                     {
-                        Encoder_Reset_Distance(); // 重置编码器距离
+                    case 0: // Show Encoder
+                        current_state = MENU_SHOW_ENCODER;
+                        break;
+                    case 1: // Show Gyro
+                        current_state = MENU_SHOW_GYRO;
+                        break;
+                    case 2: // Show view
+                        // 待实现
+                        break;
                     }
-                    else if(key_id == 3)//KEY4
-                    {
-                        current_state = MENU_DATA_VIEW; // 返回数据查看状态
-                        Selected_index = 0; // 重置选中索引
-                        Menu_resquest = 1; // 菜单更新
-                    }
+                }
+                else if (key_id == 3) // KEY4: 返回
+                {
+                    current_state = MENU_STATE_MAIN;
+                    Selected_index = 0;
+                }
                 break;
-                case MENU_SHOW_GYRO:
-                    if(key_id == 3)//KEY4 
+
+            case MENU_PARAM_SET: 
+                Menu_resquest = 1;
+                const int param_set_max_index = 2;
+                if (key_id == 0) // KEY1: 上
+                {
+                    Selected_index = (Selected_index > 0) ? Selected_index - 1 : param_set_max_index;
+                }
+                else if (key_id == 1) // KEY2: 下
+                {
+                    Selected_index = (Selected_index < param_set_max_index) ? Selected_index + 1 : 0;
+                }
+                else if (key_id == 2) // KEY3: 确认
+                {
+                    if (Selected_index == 0 || Selected_index == 1) // 选择 "Tune Motor 1 PID" 或 "Tune Motor 2 PID"
                     {
-                        current_state = MENU_DATA_VIEW; // 返回数据查看状态
-                        Selected_index = 0; // 重置选中索引
-                        Menu_resquest = 1; // 菜单更新
-                    }   
+                        tune_motor_select = Selected_index; // 记录要调的电机
+                        current_state = MENU_PID_TUNE;      // 进入PID调参状态
+                        tune_param_select = 0;              // 默认选中第一个参数Kp
+                    }
+                    else if (Selected_index == 2) 
+                    { 
+                        current_state = MENU_SET_SPEED;
+                    }
+                }
+                else if (key_id == 3) // KEY4: 返回
+                {
+                    current_state = MENU_STATE_MAIN; 
+                    Selected_index = 2; 
+                }
+                break;
+
+            case MENU_PID_TUNE: 
+                {
+                    // 根据tune_motor_select选择要操作的PID
+                    PID_TypeDef *p = (tune_motor_select == 0) ? &pid_motor1 : &pid_motor2;
+
+                    if (key_id == 0) // KEY1: 上 (在Kp, Ki, Kd之间移动光标)
+                    {
+                        tune_param_select = (tune_param_select > 0) ? tune_param_select - 1 : 2; // 循环上移
+                        Menu_resquest = 1; // 请求刷新以移动光标
+                    }
+                    else if (key_id == 1) // KEY2: 下 (在Kp, Ki, Kd之间移动光标)
+                    {
+                        tune_param_select = (tune_param_select < 2) ? tune_param_select + 1 : 0; // 循环下移
+                        Menu_resquest = 1; // 请求刷新以移动光标
+                    }
+                    else if (key_id == 2) // KEY3: 增加数值
+                    {
+                        if (tune_param_select == 0) p->Kp += tune_step[0];      // 增加Kp
+                        else if (tune_param_select == 1) p->Ki += tune_step[1]; // 增加Ki
+                        else if (tune_param_select == 2) p->Kd += tune_step[2]; // 增加Kd
+                    }
+                    else if (key_id == 3) // KEY4: 减少数值
+                    {
+                        if (tune_param_select == 0) p->Kp -= tune_step[0];      // 减少Kp
+                        else if (tune_param_select == 1) p->Ki -= tune_step[1]; // 减少Ki
+                        else if (tune_param_select == 2) p->Kd -= tune_step[2]; // 减少Kd                   
+                    }
+                }
+                break;
+
+            case MENU_SET_SPEED: 
+                if (key_id == 0) // KEY1: 增加速度
+                {
+                    Target_Speed += 10.0f; // 步长为1.0
+                }
+                else if (key_id == 1) // KEY2: 减少速度
+                {
+                    Target_Speed -= 10.0f;
+                    if (Target_Speed < 0) Target_Speed = 0; // 防止速度为负
+                }
+                else if (key_id == 3) // KEY4: 返回
+                {
+                    current_state = MENU_PARAM_SET;
+                    Selected_index = 0; 
+                    Menu_resquest = 1;
+                }
+                break;
+                
+            case MENU_SHOW_ENCODER:
+                if (key_id == 0) //KEY1
+                {
+                    Encoder_Reset_Distance(); // 重置编码器距离
+                }
+                else if (key_id == 3) //KEY4
+                {
+                    current_state = MENU_DATA_VIEW; // 返回数据查看状态
+                    Selected_index = 0;             // 重置选中索引
+                    Menu_resquest = 1;              // 菜单更新
+                }
+                break;
+
+            case MENU_SHOW_GYRO:
+                if (key_id == 3) //KEY4
+                {
+                    current_state = MENU_DATA_VIEW; // 返回数据查看状态
+                    Selected_index = 0;             // 重置选中索引
+                    Menu_resquest = 1;              // 菜单更新
+                }
+                break;
             }
+        }
+
+        if (key[key_id].Long_Flag)
+        {
+            key[key_id].Long_Flag = 0; 
+
+            if (current_state == MENU_PID_TUNE && key_id == 3)
+            {
+                current_state = MENU_PARAM_SET; // 返回上一级菜单
+                Menu_resquest = 1;
+            }
+
+            continue; 
         }
     }
 }
@@ -198,14 +292,30 @@ static void Menu_Update(void)
         {
             Gyro_Struct *gyro_data = get_angle();
             snprintf(buffer, sizeof(buffer), "Roll : %-6.2f", gyro_data->x);
-            OLED_ShowString(0, 16, (uint8_t *)buffer, 16, 1);
+            OLED_ShowString(16, 16, (uint8_t *)buffer, 16, 1);
             snprintf(buffer, sizeof(buffer), "Pitch: %-6.2f", gyro_data->y);
-            OLED_ShowString(0, 32, (uint8_t *)buffer, 16, 1);
+            OLED_ShowString(16, 32, (uint8_t *)buffer, 16, 1);
             snprintf(buffer, sizeof(buffer), "Yaw: %-6.2f", gyro_data->z);
-            OLED_ShowString(0, 48, (uint8_t *)buffer, 16, 1);
+            OLED_ShowString(16, 48, (uint8_t *)buffer, 16, 1);
         }       
         break;
-        
+    case MENU_PID_TUNE:
+        {
+            PID_TypeDef *P = (tune_motor_select==0)?&pid_motor1:&pid_motor2;
+            snprintf(buffer, sizeof(buffer), "P:%.2f", P->Kp);
+            OLED_ShowString(16, 16, (uint8_t *)buffer, 16, 1);
+            snprintf(buffer, sizeof(buffer), "I:%.2f", P->Ki);
+            OLED_ShowString(16, 32, (uint8_t *)buffer, 16, 1);
+            snprintf(buffer, sizeof(buffer), "D:%.2f", P->Kd);
+            OLED_ShowString(16, 48, (uint8_t *)buffer, 16, 1);
+        }      
+        break;
+    case MENU_SET_SPEED: 
+        {
+            snprintf(buffer, sizeof(buffer), "Target:%.1fcm/s", Target_Speed);
+            OLED_ShowString(10, 24, (uint8_t *)buffer, 16, 1);
+        }
+        break;
     default:
         break;
     }

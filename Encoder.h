@@ -18,6 +18,6 @@ extern float Motor2_Speed;
 void Encoder_Speed(void);
 float Encoder_AB_Distance(void);
 float Encoder_CD_Distance(void);
-void Move_Distance(float distance_cm, int pwm);
+void Move_With_PID(float distance_cm, float speed_cm_s);
 
 #endif

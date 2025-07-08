@@ -3,6 +3,8 @@
 
 #include "main.h"
 
+#define POSITION_MAX_SPEED_CM_S  (50.0f) //位置环输出的最大速度
+
 typedef struct
 {
     float Kp; // 比例系数
@@ -21,5 +23,6 @@ typedef struct
 
 void PID_Init(PID_TypeDef *pid, float Kp, float Ki, float Kd);
 float PID_realize(PID_TypeDef *pid, float target, float actual);
+void PID_velocity_Position(void);
 
 #endif

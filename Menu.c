@@ -17,6 +17,7 @@ typedef enum
     MENU_SHOW_VIEW,    //显示视图状态
     MENU_PID_TUNE,   //PID调参状态
     MENU_SET_SPEED, //设置速度
+    MENU_PID_DEBUG,  //PID调试状态
 } MenuState;
 
 
@@ -27,7 +28,7 @@ static uint8_t Selected_index = 0; // 当前选中菜单项索引
 
 static uint8_t tune_motor_select = 0; // 0: 电机1, 1: 电机2
 static uint8_t tune_param_select = 0; // 0: Kp, 1: Ki, 2: Kd
-static const float tune_step[] = {10.0f, 0.1f, 10.0f}; // Kp, Ki, Kd 调整步长 
+static const float tune_step[] = {1.0f, 0.0f, 5.0f}; // Kp, Ki, Kd 调整步长 
 
 //静态菜单显示
 static void display_menu(void) 
@@ -54,17 +55,31 @@ static void display_menu(void)
         break;
     case MENU_PARAM_SET:
         OLED_ShowString(0, 0, (uint8_t *)"---Param Set---", 16, 1);
+        OLED_ShowString(10, 16, (uint8_t *)"PID Debug", 16, 1); 
+        OLED_ShowString(10, 32, (uint8_t *)"Set Speed", 16, 1);
+        OLED_ShowString(0, 16 + Selected_index * 16, (uint8_t *)">", 16, 1);
+        break;
+    case MENU_PID_DEBUG:
+        OLED_ShowString(0, 0, (uint8_t *)"---PID Debug---", 16, 1);
         OLED_ShowString(10, 16, (uint8_t *)"Motor 1 PID", 16, 1);
         OLED_ShowString(10, 32, (uint8_t *)"Motor 2 PID", 16, 1);
-        OLED_ShowString(10, 48, (uint8_t *)"Set Speed", 16, 1);
+        OLED_ShowString(10, 48, (uint8_t *)"Position PID", 16, 1);
         OLED_ShowString(0, 16 + Selected_index * 16, (uint8_t *)">", 16, 1);
+        break;
     case MENU_SHOW_GYRO:
         OLED_ShowString(0, 0, (uint8_t *)"---Show Gyro---", 16, 1);
         break;
-    case MENU_PID_TUNE:
+      case MENU_PID_TUNE:
         {
             char title[20];
-            snprintf(title, sizeof(title), "---Tune Motor%d---", tune_motor_select + 1);
+            if (tune_motor_select < 2) 
+            {
+                snprintf(title, sizeof(title), "---Tune Motor%d---", tune_motor_select + 1);
+            } 
+            else 
+            {
+                snprintf(title, sizeof(title), "-Tune Position-");
+            }
             OLED_ShowString(0, 0, (uint8_t *)title, 16, 1);
             OLED_ShowString(0, 16 + tune_param_select * 16, (uint8_t *)">", 16, 1);
         }
@@ -107,7 +122,7 @@ static void Key_input(void)
                     switch (Selected_index)
                     {
                     case 0: // Start
-                        
+
                         break;
                     case 1: // Data View
                         current_state = MENU_DATA_VIEW; // 进入数据查看
@@ -154,9 +169,9 @@ static void Key_input(void)
                 }
                 break;
 
-            case MENU_PARAM_SET: 
+              case MENU_PARAM_SET: 
                 Menu_resquest = 1;
-                const int param_set_max_index = 2;
+                const int param_set_max_index = 1;
                 if (key_id == 0) // KEY1: 上
                 {
                     Selected_index = (Selected_index > 0) ? Selected_index - 1 : param_set_max_index;
@@ -167,35 +182,73 @@ static void Key_input(void)
                 }
                 else if (key_id == 2) // KEY3: 确认
                 {
-                    if (Selected_index == 0 || Selected_index == 1) // 选择 "Tune Motor 1 PID" 或 "Tune Motor 2 PID"
+                    switch (Selected_index)
                     {
-                        tune_motor_select = Selected_index; // 记录要调的电机
-                        current_state = MENU_PID_TUNE;      // 进入PID调参状态
-                        tune_param_select = 0;              // 默认选中第一个参数Kp
-                    }
-                    else if (Selected_index == 2) 
-                    { 
+                    case 0: // PID Debug
+                        current_state = MENU_PID_DEBUG;
+                        break;
+                    case 1: // Set Speed
                         current_state = MENU_SET_SPEED;
+                        break;
+                    case 2: 
+                        
+                        break;
                     }
                 }
                 else if (key_id == 3) // KEY4: 返回
                 {
-                    current_state = MENU_STATE_MAIN; 
-                    Selected_index = 2; 
+                    current_state = MENU_STATE_MAIN;
+                    Selected_index = 0;
+                }
+                break;
+
+            case MENU_PID_DEBUG:
+                Menu_resquest = 1;
+                const int pid_debug_max_index = 2;
+                if (key_id == 0) // KEY1: 上
+                {
+                    Selected_index = (Selected_index > 0) ? Selected_index - 1 : pid_debug_max_index;
+                }
+                else if (key_id == 1) // KEY2: 下
+                {
+                    Selected_index = (Selected_index < pid_debug_max_index) ? Selected_index + 1 : 0;
+                }
+                else if (key_id == 2) // KEY3: 确认
+                {
+                    tune_motor_select = Selected_index; 
+                    current_state = MENU_PID_TUNE; 
+                    tune_param_select = 0;
+                }
+                else if (key_id == 3) // KEY4: 返回
+                {
+                    current_state = MENU_PARAM_SET; // 返回到 "Param Set"
+                    Selected_index = 0; 
                 }
                 break;
 
             case MENU_PID_TUNE: 
                 {
                     // 根据tune_motor_select选择要操作的PID
-                    PID_TypeDef *p = (tune_motor_select == 0) ? &pid_motor1 : &pid_motor2;
+                    PID_TypeDef *p;
+                    if (tune_motor_select == 0) 
+                    {
+                        p = &pid_motor1;
+                    } 
+                    else if (tune_motor_select == 1)
+                    {
+                        p = &pid_motor2;
+                    } 
+                    else if (tune_motor_select == 2) 
+                    { 
+                        p = &pid_position;
+                    }
 
-                    if (key_id == 0) // KEY1: 上 (在Kp, Ki, Kd之间移动光标)
+                    if (key_id == 0) // KEY1:上 
                     {
                         tune_param_select = (tune_param_select > 0) ? tune_param_select - 1 : 2; // 循环上移
                         Menu_resquest = 1; // 请求刷新以移动光标
                     }
-                    else if (key_id == 1) // KEY2: 下 (在Kp, Ki, Kd之间移动光标)
+                    else if (key_id == 1) // KEY2:下 
                     {
                         tune_param_select = (tune_param_select < 2) ? tune_param_select + 1 : 0; // 循环下移
                         Menu_resquest = 1; // 请求刷新以移动光标
@@ -218,12 +271,12 @@ static void Key_input(void)
             case MENU_SET_SPEED: 
                 if (key_id == 0) // KEY1: 增加速度
                 {
-                    Target_Speed += 10.0f; // 步长为1.0
+                    Target_Speed += 25.0f; // 步长为1.0
                 }
                 else if (key_id == 1) // KEY2: 减少速度
                 {
-                    Target_Speed -= 10.0f;
-                    if (Target_Speed < 0) Target_Speed = 0; // 防止速度为负
+                    Target_Speed -= 25.0f;
+                    //if (Target_Speed < 0) Target_Speed = 0; // 防止速度为负
                 }
                 else if (key_id == 3) // KEY4: 返回
                 {
@@ -264,6 +317,7 @@ static void Key_input(void)
             if (current_state == MENU_PID_TUNE && key_id == 3)
             {
                 current_state = MENU_PARAM_SET; // 返回上一级菜单
+                Selected_index = 0; 
                 Menu_resquest = 1;
             }
 
@@ -301,12 +355,24 @@ static void Menu_Update(void)
         break;
     case MENU_PID_TUNE:
         {
-            PID_TypeDef *P = (tune_motor_select==0)?&pid_motor1:&pid_motor2;
-            snprintf(buffer, sizeof(buffer), "P:%.2f", P->Kp);
+            PID_TypeDef *P;
+            if (tune_motor_select == 0) 
+            {
+                P = &pid_motor1;
+            } 
+            else if (tune_motor_select == 1) 
+            {
+                P = &pid_motor2;
+            } 
+            else 
+            { 
+                P = &pid_position;                 
+            }
+            snprintf(buffer, sizeof(buffer), "P:%.3f", P->Kp);
             OLED_ShowString(16, 16, (uint8_t *)buffer, 16, 1);
-            snprintf(buffer, sizeof(buffer), "I:%.2f", P->Ki);
+            snprintf(buffer, sizeof(buffer), "I:%.3f", P->Ki);
             OLED_ShowString(16, 32, (uint8_t *)buffer, 16, 1);
-            snprintf(buffer, sizeof(buffer), "D:%.2f", P->Kd);
+            snprintf(buffer, sizeof(buffer), "D:%.3f", P->Kd);
             OLED_ShowString(16, 48, (uint8_t *)buffer, 16, 1);
         }      
         break;

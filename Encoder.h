@@ -12,6 +12,8 @@
 #define DISTANCE_COUNT      (0.05535f)  // 单位: cm/count
 // 测速时间间隔 (秒)
 #define SPEED_CALC_INTERVAL_S   (0.01f)      // 10ms
+
+
 extern float Motor1_Speed;
 extern float Motor2_Speed;
 

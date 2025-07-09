@@ -19,6 +19,7 @@
  * @brief  初始化与MaixCAM通信的串口中断
  * @param  None
  * @retval None
+ * 
  */
 void MaixCAM_Init(void);
 

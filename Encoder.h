@@ -21,5 +21,5 @@ void Encoder_Speed(void);
 float Encoder_AB_Distance(void);
 float Encoder_CD_Distance(void);
 void Move_With_PID(float distance_cm, float speed_cm_s);
-
+void Encoder_Reset_Distance(void);
 #endif

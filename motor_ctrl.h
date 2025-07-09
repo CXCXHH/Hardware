@@ -16,9 +16,16 @@
 #define Motor2_Backward()	{BIN1(1);BIN2(0);}
 #define Motor2_Stop()		{BIN1(0);BIN2(0);}
 
+// 角度误差阈值
+#define ANGLE_ERROR_THRESHOLD 0.5f 
+// 转弯最大角速度
+#define MAX_TURN_ANGULAR_SPEED 50.0f 
+
 void Set_Motor1_PWm(int Target_PWM);
 void Set_Motor2_PWm(int Target_PWM);
 void Set_Motor1_Speed(int Target_Speed);
 void Set_Motor2_Speed(int Target_Speed);
+void Turn_Right(float angle);
+void Turn_Left(float angle);
 
 #endif

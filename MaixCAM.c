@@ -1,6 +1,4 @@
-// 包含MaixCAM模块的头文件
 #include "MaixCAM.h"
-// 包含TI MSPM0的SysConfig配置文件
 #include "ti_msp_dl_config.h" 
 
 
@@ -104,7 +102,7 @@ uint8_t Get_MaixCAM_Number(void)
 }
 
 /**
- * @brief  【新增】手动清除内部存储的识别数字
+ * @brief  手动清除内部存储的识别数字
  * @note   用于在任务开始时清除旧的、可能残留的数字，避免误判
  * @param  None
  * @retval None

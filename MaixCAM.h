@@ -8,7 +8,6 @@
 // 宏定义
 /*================================================================================*/
 
-// [修复] 将缓冲区大小改为4，以匹配Python发送的实际数据负载长度
 // Python发送: [0x5B, 0x5B, digit_value, 0xB3] 共4个字节
 #define MAIXCAM_RX_BUFF_SIZE   4 
 
@@ -38,7 +37,7 @@ uint8_t Get_MaixCAM_Coordinate(void);
 uint8_t Get_MaixCAM_Number(void);
 
 /**
- * @brief  【新增】手动清除内部存储的识别数字
+ * @brief  手动清除内部存储的识别数字
  * @note   用于在任务开始时清除旧的、可能残留的数字，避免误判
  * @param  None
  * @retval None

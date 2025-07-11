@@ -74,3 +74,66 @@ void Line_Following(void)
     Set_Motor1_Speed(pwm_output1);
     Set_Motor2_Speed(pwm_output2);
 }
+
+void PID_velocity_Position_and_Line_Following(float expected_distance)
+{
+    // 使用期望距离更新目标位置
+    Target_Position = expected_distance;
+
+    // 位置环控制
+    float current_position = (Encoder_AB_Distance() + Encoder_CD_Distance()) / 2.0f;
+    float desired_speed = PID_realize(&pid_position, Target_Position, current_position);
+
+    // 对位置环输出的速度进行限幅
+    if (desired_speed > POSITION_MAX_SPEED_CM_S)
+    {
+        desired_speed = POSITION_MAX_SPEED_CM_S;
+    }
+    else if (desired_speed < -POSITION_MAX_SPEED_CM_S)
+    {
+        desired_speed = -POSITION_MAX_SPEED_CM_S;
+    }
+
+    // 转向环控制
+    uint8_t sensor_value = Read_Sensor();
+    int black_count = 0;
+    float weighted_sum = 0;
+
+    for(int i = 0; i < 8; i++)
+    {
+        if( !((sensor_value >> i) & 1) )
+        {
+            weighted_sum += Sensor_Weights[i];
+            black_count++;
+        }
+    }
+
+    if(black_count > 0)
+    {
+        float error = weighted_sum / black_count;
+        float turn_output = PID_realize(&pid_tuen, 0, error);
+
+        // 将转向控制应用到速度目标值
+        float motor1_target_speed = desired_speed - turn_output;
+        float motor2_target_speed = desired_speed + turn_output;
+
+        // 内环：速度PI控制器
+        static float filtered_speed1 = 0.0f;
+	    static float filtered_speed2 = 0.0f;
+        const float alpha = 0.80f; 
+	    filtered_speed1 = alpha * Motor1_Speed + (1.0f - alpha) * filtered_speed1;
+	    filtered_speed2 = alpha * Motor2_Speed + (1.0f - alpha) * filtered_speed2;
+
+        // 设置电机速度
+        int pwm_output1 = (int)PID_realize(&pid_motor1, motor1_target_speed*10, filtered_speed1);
+        int pwm_output2 = (int)PID_realize(&pid_motor2, motor2_target_speed*10, filtered_speed2);
+
+        Set_Motor1_Speed(pwm_output1);
+        Set_Motor2_Speed(pwm_output2);
+    }
+    else
+    {
+        Motor1_Stop();
+        Motor2_Stop();
+    }
+}

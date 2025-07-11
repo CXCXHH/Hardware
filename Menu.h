@@ -13,5 +13,6 @@ void Menu_loop(void);
 
 extern uint8_t g_line_following_enabled;
 extern float g_target_angle_setting; // 目标角度
+extern uint8_t g_target_digit;
 
 #endif

@@ -27,5 +27,6 @@ void Set_Motor1_Speed(int Target_Speed);
 void Set_Motor2_Speed(int Target_Speed);
 void Turn_Right(float angle);
 void Turn_Left(float angle);
+void Motor_Stop(void);
 
 #endif

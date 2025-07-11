@@ -83,7 +83,7 @@ void Turn_Right(float angle)
       {
           error += 360.0f;
       }
-      turn_angular_speed = PID_realize(&pid_angle, target_angle, current_angle);
+      turn_angular_speed = PID_realize(&pid_angle, 0, error);
 
       if(turn_angular_speed > MAX_TURN_ANGULAR_SPEED) turn_angular_speed = MAX_TURN_ANGULAR_SPEED;
       if(turn_angular_speed < -MAX_TURN_ANGULAR_SPEED) turn_angular_speed = -MAX_TURN_ANGULAR_SPEED;
@@ -127,7 +127,7 @@ void Turn_Left(float angle)
       {
           error += 360.0f;
       }
-      turn_angular_speed = PID_realize(&pid_angle, target_angle, current_angle);
+      turn_angular_speed = PID_realize(&pid_angle, 0, -error);
 
       if(turn_angular_speed > MAX_TURN_ANGULAR_SPEED) turn_angular_speed = MAX_TURN_ANGULAR_SPEED;
       if(turn_angular_speed < -MAX_TURN_ANGULAR_SPEED) turn_angular_speed = -MAX_TURN_ANGULAR_SPEED;
@@ -138,6 +138,12 @@ void Turn_Left(float angle)
       Set_Motor2_Speed(pwm_output2);
     }while (fabs(error) > ANGLE_ERROR_THRESHOLD);
 
+    Motor1_Stop();
+    Motor2_Stop();
+}
+
+void Motor_Stop(void)
+{
     Motor1_Stop();
     Motor2_Stop();
 }

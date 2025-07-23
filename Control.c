@@ -6,6 +6,7 @@
 #include "Encoder.h"
 #include <math.h> 
 #include "jy61p.h"
+#include "usart.h"
 
 // 全局静态变量，用于存储当前控制状态
 static ControlState_t g_current_state = STATE_IDLE;
@@ -16,16 +17,16 @@ static uint8_t g_recall_turn_direction = 0; // 0: 去程右转，返程左转; 1
 static uint8_t Long_recall_turn_direction = 0;//0:左转，1：右转
 static uint8_t Long_Flag = 0;
 
-// 任务参数定义（可自行修改）
+// 任务参数定义
 #define NEAR_DISTANCE         82.75  // 近端第一段距离
-#define NEAR_FINAL_DISTANCE   20.0   // 近端第二段距离
+#define NEAR_FINAL_DISTANCE   35.0   // 近端第二段距离
 #define MID_DISTANCE          175.0  // 中端第一段距离
-#define MID_FINAL_DISTANCE    20.0   // 中端第二段距离
-#define FAR_DISTANCE          265.0  // 远端第一段距离
-#define FAR_TURN_DISTANCE     80.0   // 远端转弯后距离
-#define FAR_RETURN_DISTANCE   170.0  // 远端无方向时的返回距离
-#define FAR_TURN_DISTANCE_1   75.0   // 远端转弯后距离
-#define FAR_FINAL_DISTANCE    25.0   // 远端最终距离
+#define MID_FINAL_DISTANCE    35.0   // 中端第二段距离
+#define FAR_DISTANCE          268.0  // 远端第一段距离
+#define FAR_TURN_DISTANCE     90.0   // 远端转弯后距离
+#define FAR_RETURN_DISTANCE   180.0  // 远端无方向时的返回距离
+#define FAR_TURN_DISTANCE_1   90.0   // 远端转弯后距离
+#define FAR_FINAL_DISTANCE    30.0   // 远端最终距离
 
 // 为了代码清晰和方便移植，建议将速度值也定义为宏
 #define SPEED_HIGH 100.0f // 假设高速为100
@@ -46,6 +47,8 @@ void Control_Init(void)
  */
 void Control_Set_State(ControlState_t new_state)
 {
+    count = 0;
+    Target_Speed=50;
     if (g_current_state != new_state)
     {
         g_current_state = new_state;
@@ -60,6 +63,7 @@ void Control_Set_State(ControlState_t new_state)
             )
         {
             Encoder_Reset_Distance();
+            Get_MaixCAM_Frame_Counter_Reset();
         }
     }
 }
@@ -113,6 +117,7 @@ void Control(void)
         // 第一段前进
         case STATE_INITIATE_FORWARD:
         {
+            
             // 这里可以设置初始前进速度
             Target_Speed = SPEED_HIGH; 
             float initial_distance = (detected_number == 1 || detected_number == 2) ? NEAR_DISTANCE : FAR_DISTANCE;
@@ -123,19 +128,22 @@ void Control(void)
 
         case STATE_WAIT_FOR_FORWARD:
         {
+            
             float current_dist = (Encoder_AB_Distance() + Encoder_CD_Distance()) / 2.0f;
             if (detected_number == 1 || detected_number == 2)
             {
                 g_current_task_type = TASK_SHORT;
                 PID_velocity_Position_and_Line_Following(NEAR_DISTANCE);
             }
-            else if (current_dist > 100.0f && Get_MaixCAM_Frame_Counter() > 2 &&current_dist<170)
+            else if (current_dist > 100.0f && count==1&&Get_MaixCAM_Frame_Counter()>1)
             {
+                Target_Speed = 30;
                 g_current_task_type = TASK_MIDDLE;
                 PID_velocity_Position_and_Line_Following(MID_DISTANCE);
             }
             else
             {
+                Target_Speed = 50;
                 g_current_task_type = TASK_LONG;
                 PID_velocity_Position_and_Line_Following(FAR_DISTANCE);
             }
@@ -149,8 +157,10 @@ void Control(void)
 
         case STATE_EXECUTE_TURN:
         {
+            uart0_send_char('a');
             if (g_current_task_type == TASK_SHORT)
             {
+                
                 if (detected_number == 1) // 左转
                 {
                     Turn_Left(90);
@@ -181,6 +191,7 @@ void Control(void)
                 Turn_Left(90); // 远端固定左转
                 g_recall_turn_direction = 1;
             }
+            
             Control_Set_State(STATE_INITIATE_FINAL_MOVE);
             break;
         }
@@ -196,7 +207,7 @@ void Control(void)
 
         case STATE_WAIT_FOR_FINAL_MOVE:
         {
-            // 在等待阶段，需要持续调用控制函数以维持运动
+            Target_Speed=30;
             float final_distance = (g_current_task_type == TASK_SHORT) ? NEAR_FINAL_DISTANCE :
                                   (g_current_task_type == TASK_MIDDLE) ? MID_FINAL_DISTANCE : FAR_TURN_DISTANCE;
             PID_velocity_Position_and_Line_Following(final_distance);
@@ -217,9 +228,10 @@ void Control(void)
 
         case STATE_LONG_JUDGE:
         {
+            Target_Speed=50;
             Long_Flag=1;
             uint8_t direction = Get_MaixCAM_Direction();
-            if (Get_MaixCAM_Frame_Counter()>=2) // 无方向，右掉头180度
+            if (Get_MaixCAM_Frame_Counter()==0) // 无方向，右掉头180度
             {
                 Turn_Right(180);
                 Long_recall_turn_direction = 0;
@@ -245,6 +257,7 @@ void Control(void)
 
         case STATE_LONG_TRUE:
         {
+            PID_Init(&pid_tuen, 20.5f, 0.0f, 5.0f);
             PID_velocity_Position_and_Line_Following(FAR_FINAL_DISTANCE);
             if (is_distance_reached()) 
             {
@@ -257,17 +270,22 @@ void Control(void)
         {
             
             PID_velocity_Position_and_Line_Following(FAR_RETURN_DISTANCE);
+            if(Get_MaixCAM_Frame_Counter())
+            {
+                Target_Speed=30;
+                PID_Init(&pid_tuen, 5.0f, 0.0f, 0.0f);
+            }
             if (is_distance_reached()) 
             {
                 uint8_t direction = Get_MaixCAM_Direction();
                 if (direction == 1) // 左转
                 {
-                    Turn_Left(90);
+                    Turn_Left(80);
                     g_recall_turn_direction = 1;
                 }
                 else if (direction == 2) // 右转
                 {
-                    Turn_Right(90);
+                    Turn_Right(80);
                     g_recall_turn_direction = 0;
                 }
                 Control_Set_State(STATE_LONG_TRUE);
@@ -300,7 +318,7 @@ void Control(void)
         {
 
              
-            float recall_dist_1 = 27.5; // 返回第一段距离
+            float recall_dist_1 = 40; // 返回第一段距离
             PID_velocity_Position_and_Line_Following(recall_dist_1);
             Control_Set_State(STATE_RECALL_WAIT_FOR_MOVE_BACK);
             break;
@@ -309,7 +327,7 @@ void Control(void)
         case STATE_RECALL_WAIT_FOR_MOVE_BACK:
         {
 
-            float recall_dist_1 = 27.5; 
+            float recall_dist_1 = 40; 
             PID_velocity_Position_and_Line_Following(recall_dist_1);
 
             if (is_distance_reached())
@@ -320,9 +338,10 @@ void Control(void)
         }
 
         case STATE_RECALL_EXECUTE_FINAL_TURN:
+            uart0_send_char('b');
             if (g_recall_turn_direction == 0)
             {
-                Turn_Left(70); 
+                Turn_Left(80); 
             }
             else
             {
@@ -363,7 +382,7 @@ void Control(void)
         {
             if (Long_recall_turn_direction == 0)
             {
-                Turn_Left(70); 
+                Turn_Left(90); 
             }
             else
             {
@@ -387,7 +406,7 @@ void Control(void)
 
         case STATE_RECALL_WAIT_FOR_FINAL_MOVE:
         {
-             Target_Speed = 80;
+             Target_Speed = 50;
             float recall_dist_2 = (g_current_task_type == TASK_SHORT) ? 60.0 :
                                  (g_current_task_type == TASK_MIDDLE) ? 145.0 : 247.5;
             PID_velocity_Position_and_Line_Following(recall_dist_2);

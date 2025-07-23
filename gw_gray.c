@@ -7,11 +7,13 @@
 
 PID_TypeDef pid_tuen; // 转向PID
 PID_TypeDef pid_angle; // 角度PID
+uint8_t count = 0; // 黑线计数器
 
 const int8_t Sensor_Weights[] = {8, 6, 4, 2, -2, -4, -6, -8};// 传感器权重
 
 uint8_t Read_Sensor(void)
 {
+    int black_count = 0;
     uint8_t sensor_value = 0;
     if(DL_GPIO_readPins(Huidu_L_1_PORT, Huidu_L_1_PIN)) sensor_value |= (1 << 0);
     if(DL_GPIO_readPins(Huidu_L_2_PORT, Huidu_L_2_PIN)) sensor_value |= (1 << 1);
@@ -22,6 +24,19 @@ uint8_t Read_Sensor(void)
     if(DL_GPIO_readPins(Huidu_R_2_PORT, Huidu_R_2_PIN)) sensor_value |= (1 << 6);
     if(DL_GPIO_readPins(Huidu_R_3_PORT, Huidu_R_3_PIN)) sensor_value |= (1 << 7);
     
+    for(int i = 0; i < 8; i++)
+    {
+        if( ((sensor_value >> i) & 1) )
+        {
+            black_count++;
+        }
+    }
+
+    if(black_count >= 6)
+    {
+        count=1;
+    }
+
     return sensor_value;
 }
 
@@ -85,13 +100,13 @@ void PID_velocity_Position_and_Line_Following(float expected_distance)
     float desired_speed = PID_realize(&pid_position, Target_Position, current_position);
 
     // 对位置环输出的速度进行限幅
-    if (desired_speed > POSITION_MAX_SPEED_CM_S)
+    if (desired_speed > Target_Speed)
     {
-        desired_speed = POSITION_MAX_SPEED_CM_S;
+        desired_speed = Target_Speed;
     }
-    else if (desired_speed < -POSITION_MAX_SPEED_CM_S)
+    else if (desired_speed < -Target_Speed)
     {
-        desired_speed = -POSITION_MAX_SPEED_CM_S;
+        desired_speed = -Target_Speed;
     }
 
     // 转向环控制

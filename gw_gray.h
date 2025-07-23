@@ -6,9 +6,10 @@
 #define LINE_FOLLOW_BASE_SPEED  (Target_Speed)
 extern PID_TypeDef pid_tuen;//转向PID
 extern PID_TypeDef pid_angle; // 电机1 PID 
+extern uint8_t count;
 
 
-
+uint8_t Read_Sensor(void);
 void Line_Following(void);
 void PID_velocity_Position_and_Line_Following(float expected_distance);
 #endif

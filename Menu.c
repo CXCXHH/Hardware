@@ -333,9 +333,9 @@ static void Menu_Update(void)
             snprintf(buffer, sizeof(buffer), "Direct: %s", dir_str);
             OLED_ShowString(0, 32, (uint8_t *)buffer, 16, 1);
 
-            snprintf(buffer, sizeof(buffer), "F:%-4lu L:0x%02X", 
+            snprintf(buffer, sizeof(buffer), "F:%-4lu Count:%d", 
                      Get_MaixCAM_Frame_Counter(), 
-                     Get_MaixCAM_Last_Byte());
+                     count);
             OLED_ShowString(0, 48, (uint8_t*)buffer, 16, 1);
         }
         break;
@@ -371,7 +371,7 @@ static void Menu_Update(void)
                 view_buffer[i * 2] = ((sensor_value >> i) & 1) ? '1' : '0';
                 view_buffer[i * 2 + 1] = ' ';
             }
-            view_buffer[15] = '\0'; // 最后一个空格去掉，换成字符串结尾
+            view_buffer[15] = '\0'; 
 
             OLED_ShowString(4, 24, (uint8_t *)view_buffer, 16, 1);
         }

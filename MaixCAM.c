@@ -91,3 +91,8 @@ uint8_t Get_MaixCAM_Last_Byte(void)
 { 
     return g_ucLastReceivedByte; 
 }
+
+uint32_t Get_MaixCAM_Frame_Counter_Reset(void) 
+{ 
+    return g_ulValidFrameCounter=0; 
+}
